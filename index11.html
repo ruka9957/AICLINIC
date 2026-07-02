@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI HAND CLINIC // FUNCTIONALITY TEST</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <style>
+        /* --- 样式系统 --- */
+        :root {
+            --teal-dark: #004d40;
+            --teal-medium: #00897b;
+            --teal-light: #4db6ac;
+            --teal-accent: #1de9b6; 
+            --metal-dark: #2c2c2c;
+            --metal-light: #b0bec5;
+            --off-white: #eceff1;
+            --bg-gradient: linear-gradient(135deg, #e0f2f1 0%, #80cbc4 100%);
+            --font-title: 'Archivo Black', sans-serif;
+            --font-tech: 'Space Mono', monospace;
+            --neon-shadow: 0 0 10px var(--teal-accent);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        
+        body {
+            height: 100vh; background: var(--bg-gradient);
+            font-family: var(--font-tech); color: var(--teal-dark);
+            display: flex; justify-content: center; align-items: center;
+            overflow: hidden; position: relative;
+        }
+
+        /* 背景网点 */
+        body::before {
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: radial-gradient(var(--teal-medium) 1px, transparent 1px);
+            background-size: 20px 20px; opacity: 0.15; pointer-events: none; z-index: 0;
+        }
+
+        /* --- 主界面容器 --- */
+        .main-grid {
+            position: relative; z-index: 1;
+            width: 95vw; height: 95vh; max-width: 1200px;
+            display: grid;
+            grid-template-columns: 120px 1fr 180px;
+            grid-template-rows: auto 1fr auto;
+            gap: 0px;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(15px);
+            border: 4px solid var(--metal-dark);
+            box-shadow: 10px 10px 0px var(--teal-dark);
+        }
+
+        .grid-cell { border: 2px solid var(--metal-dark); padding: 15px; position: relative; overflow: hidden; }
+
+        /* --- 顶部标题栏 --- */
+        .header-area {
+            grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 25px 0; background: rgba(255,255,255,0.5); border-bottom: 4px solid var(--metal-dark);
+        }
+        h1.metal-title {
+            font-family: var(--font-title); font-size: 3rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;
+            color: #e0e0e0; text-shadow: 1px 1px 0 #9e9e9e, 5px 5px 0 var(--metal-dark); position: relative;
+        }
+        h1.metal-title::after {
+            content: ''; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
+            width: 60%; height: 4px; background: var(--teal-accent); box-shadow: 2px 2px 0 var(--metal-dark);
+        }
+        .sub-header { font-family: var(--font-tech); font-weight: bold; display: flex; gap: 20px; font-size: 0.9rem; }
+
+        /* --- 左侧栏 --- */
+        .sidebar-left {
+            grid-row: 2 / 4; background: var(--metal-dark); color: var(--off-white);
+            display: flex; flex-direction: column; justify-content: space-between;
+            writing-mode: vertical-rl; text-orientation: mixed;
+            font-size: 1.2rem; font-weight: bold; letter-spacing: 5px; padding: 30px 0; align-items: center;
+        }
+
+        /* --- 中央视口 --- */
+        .main-viewport {
+            background: rgba(0,0,0,0.05); display: flex; justify-content: center; align-items: center;
+            position: relative; box-shadow: inset 0 0 0 2px var(--teal-light); overflow: hidden;
+        }
+        .input_video { display: none; }
+        canvas { max-width: 98%; max-height: 98%; object-fit: contain; z-index: 10; border: 2px solid var(--teal-accent); }
+        
+        .placeholder-text {
+            position: absolute; color: var(--teal-dark); opacity: 0.6; font-weight: bold; pointer-events: none;
+            text-align: center; text-transform: uppercase; letter-spacing: 1px; z-index: 12;
+        }
+
+        /* --- 右侧栏 --- */
+        .sidebar-right { background: var(--teal-light); display: flex; flex-direction: column; gap: 10px; }
+        .data-block {
+            background: rgba(255,255,255,0.8); border: 2px solid var(--metal-dark);
+            padding: 10px; font-size: 0.8rem; flex-grow: 1; position: relative;
+        }
+        .data-block::before {
+            content: '[DATA_FRAGMENT]'; position: absolute; top: -8px; left: 5px;
+            background: var(--metal-dark); color: var(--teal-accent); font-size: 0.6rem; padding: 2px 4px;
+        }
+
+        /* --- 底部控制栏 --- */
+        .controls-area {
+            grid-column: 2 / 3; display: flex; gap: 20px; padding: 20px;
+            background: var(--off-white); border-top: 4px solid var(--metal-dark);
+            align-items: center; justify-content: space-between;
+        }
+        .btn {
+            font-family: var(--font-title); text-transform: uppercase;
+            background: var(--off-white); border: 3px solid var(--metal-dark);
+            color: var(--metal-dark); padding: 15px 30px; font-size: 1rem;
+            cursor: pointer; position: relative; transition: all 0.1s;
+            box-shadow: 5px 5px 0px var(--metal-dark);
+        }
+        .btn:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0px var(--metal-dark); background: var(--teal-accent); }
+        .btn:active { transform: translate(3px, 3px); box-shadow: 0px 0px 0px var(--metal-dark); }
+        .btn-primary { background: var(--metal-dark); color: var(--teal-accent); border-color: var(--teal-accent); }
+        .btn-primary:hover { background: var(--teal-accent); color: var(--metal-dark); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
+
+        /* --- 覆盖层通用样式 (修复定位问题) --- */
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 77, 64, 0.98); 
+            z-index: 100; 
+            display: none; /* JS控制显示 */
+            
+            /* 使用 Flexbox 强制所有内容垂直居中 */
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center;
+            gap: 20px; /* 元素之间的间距 */
+            
+            padding: 20px; text-align: center;
+            background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .blinking-message {
+            font-family: var(--font-title); color: var(--teal-accent); font-size: 2.5rem;
+            line-height: 1.2; text-transform: uppercase; text-shadow: 2px 0 0 red, -2px 0 0 blue;
+            animation: textGlitch 0.5s ease-in-out infinite alternate;
+        }
+        @keyframes textGlitch {
+            0% { opacity: 1; transform: skewX(0deg); }
+            20% { opacity: 0.8; transform: skewX(-2deg); }
+            80% { opacity: 0.9; transform: skewX(2deg); }
+            100% { opacity: 1; transform: skewX(0deg); }
+        }
+
+        /* 诊断报告大图 */
+        .diagnosis-img {
+            height: 85vh; width: auto; max-width: 95vw; object-fit: contain;
+            border: 4px solid var(--teal-accent); box-shadow: var(--neon-shadow); z-index: 101;
+        }
+
+        /* --- 手术界面样式 (修复文字和按钮位置) --- */
+        #surgeryTitle {
+            color: var(--teal-accent); 
+            font-family: var(--font-title);
+            font-size: 2.5rem; 
+            margin: 0;
+        }
+
+        #surgeryMsg {
+            /* 移除 absolute，让它自然堆叠 */
+            position: static; 
+            background: rgba(0,0,0,0.9); color: var(--teal-accent); padding: 10px 25px;
+            border: 2px solid var(--teal-accent);
+            font-family: var(--font-title); font-size: 1rem; pointer-events: none;
+            text-transform: uppercase; letter-spacing: 2px;
+        }
+
+        #puzzleContainer {
+            /* 相对定位，确保拼图在中间 */
+            position: relative; 
+            width: 500px; height: 500px;
+            border: 4px solid var(--teal-accent); 
+            box-shadow: 0 0 20px var(--teal-accent);
+            background: #000;
+            display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+            gap: 2px;
+            flex-shrink: 0; /* 防止被压缩 */
+        }
+
+        .puzzle-piece {
+            width: 100%; height: 100%;
+            background-image: url('glitch_hand.png'); 
+            background-size: 500px 500px; cursor: grab;
+            border: 1px solid rgba(29, 233, 182, 0.3);
+        }
+        .puzzle-piece.dragging { opacity: 0.8; z-index: 10; transform: scale(1.05); }
+
+        /* 手术完成按钮 */
+        #surgeryNextBtn {
+            display: block; /* 强制显示 */
+            margin-top: 10px;
+            animation: pulse 1.5s infinite;
+            z-index: 200;
+        }
+
+        /* --- 功能选择卡片 --- */
+        #selectionContainer {
+            display: flex; gap: 30px; margin-top: 20px; justify-content: center; flex-wrap: wrap;
+        }
+        .selection-card {
+            width: 250px; height: 350px;
+            border: 3px solid var(--metal-dark); background: #000;
+            position: relative; cursor: pointer; transition: 0.3s; overflow: hidden;
+        }
+        .selection-card img { width: 100%; height: 100%; object-fit: cover; opacity: 0.7; transition: 0.3s; }
+        .selection-card:hover { border-color: var(--teal-accent); transform: translateY(-10px); box-shadow: 0 0 20px var(--teal-accent); }
+        .selection-card:hover img { opacity: 1; }
+        .card-label {
+            position: absolute; bottom: 0; width: 100%; background: var(--teal-accent); color: #000;
+            padding: 10px; font-weight: bold; font-size: 0.9rem; text-transform: uppercase;
+        }
+
+        /* --- 游戏界面 --- */
+        #gameView { position: relative; width: 100%; height: 100%; }
+        #gameCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
+        
+        #playerHand {
+            position: absolute; width: 300px; height: auto;
+            transform: translate(-50%, -50%);
+            filter: drop-shadow(0 0 10px var(--teal-accent));
+            opacity: 0.9; pointer-events: none; z-index: 15;
+            transition: transform 0.1s linear, filter 0.2s;
+        }
+        #playerHand.active-magnet {
+            filter: drop-shadow(0 0 30px #fff) sepia(100%) hue-rotate(180deg) brightness(1.5);
+            transform: translate(-50%, -50%) scale(0.9);
+        }
+
+        .target-zone {
+            position: absolute; width: 100px; height: 100px;
+            border-width: 4px; border-style: dashed; border-radius: 10px;
+            display: flex; justify-content: center; align-items: center;
+            font-family: var(--font-title); font-size: 1.2rem; background: rgba(0,0,0,0.5);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .game-hud-msg {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); color: var(--teal-accent); padding: 15px 30px;
+            border: 2px solid var(--teal-accent);
+            font-family: var(--font-title); font-size: 1rem; pointer-events: none;
+            text-transform: uppercase; letter-spacing: 2px;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(29, 233, 182, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(29, 233, 182, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(29, 233, 182, 0); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <video class="input_video"></video>
+
+    <div id="overlayScan" class="overlay">
+        <div class="blinking-message">Scan complete. Searching archive...</div>
+    </div>
+
+    <div id="overlayReport" class="overlay">
+        <img src="diagnosis.jpg" class="diagnosis-img" alt="Diagnosis Report">
+        <button class="btn" id="startSurgeryBtn" style="position: absolute; bottom: 30px; z-index: 200;">
+            ACCEPT & BEGIN SURGERY
+        </button>
+    </div>
+
+    <div id="overlaySurgery" class="overlay">
+        <h2 id="surgeryTitle">SURGERY: MESH RECONSTRUCTION</h2>
+        
+        <div id="surgeryMsg">DRAG AND SWAP PIECES TO RESTORE THE HAND</div>
+        
+        <div id="puzzleContainer"></div>
+        
+        <button class="btn btn-primary" id="surgeryNextBtn">
+            SURGERY COMPLETE / PROCEED
+        </button>
+    </div>
+
+    <div id="overlaySelection" class="overlay">
+        <h2 class="metal-title" style="color: var(--teal-accent); font-size: 2rem;">SELECT FUNCTIONALITY TEST</h2>
+        <p style="color: #fff; margin-bottom: 20px;">Choose a scenario to validate the new hand optimization.</p>
+        
+        <div id="selectionContainer">
+            <div class="selection-card" onclick="startTest('GARDEN')">
+                <img src="test_1.jpg" alt="Gardening">
+                <div class="card-label">Precision Gardening</div>
+            </div>
+            <div class="selection-card" onclick="startTest('CABLES')">
+                <img src="test_2.jpg" alt="Cable Management">
+                <div class="card-label">Cable Management</div>
+            </div>
+            <div class="selection-card" onclick="startTest('LAB')">
+                <img src="test_3.jpg" alt="Lab Work">
+                <div class="card-label">Fluid Handling</div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="overlayFinish" class="overlay">
+        <div class="blinking-message">TREATMENT SUCCESSFUL</div>
+        <p style="color: #fff; margin-top: 20px; font-family: var(--font-tech);">
+            The hand has been optimized for multi-tasking.
+        </p>
+        <button class="btn" onclick="location.reload()" style="margin-top: 40px;">NEXT PATIENT</button>
+    </div>
+
+    <div class="main-grid">
+        <header class="grid-cell header-area">
+            <h1 class="metal-title">AI Hand Misdiagnosis Clinic</h1>
+            <div class="sub-header">
+                <div>BAUHAUS_LAB // UNIT 03</div>
+                <div style="background: var(--teal-accent); color: var(--metal-dark); padding: 2px 5px;" id="systemStatus">STATUS: AWAITING INPUT</div>
+            </div>
+        </header>
+
+        <div class="grid-cell sidebar-left">
+            <span>DECONSTRUCT</span><span>///</span><span>REASSEMBLE</span>
+        </div>
+
+        <div class="grid-cell main-viewport" id="viewport">
+            <div class="placeholder-text" id="placeholderText">
+                [ Initiate Sequence ]<br>
+                Click X-RAY to Activate
+            </div>
+            
+            <canvas id="scanCanvas"></canvas>
+
+            <div id="gameView" style="display:none;">
+                <div id="targetRed" class="target-zone" style="top:15%; left:10%; border-color:#ff5252; color:#ff5252;">RED</div>
+                <div id="targetBlue" class="target-zone" style="top:15%; right:10%; border-color:#448aff; color:#448aff;">BLUE</div>
+                <div id="targetGreen" class="target-zone" style="bottom:15%; left:50%; transform:translateX(-50%); border-color:#69f0ae; color:#69f0ae;">GREEN</div>
+
+                <img src="glitch_hand.png" id="playerHand">
+                <canvas id="gameCanvas"></canvas>
+            </div>
+        </div>
+
+        <div class="grid-cell sidebar-right">
+            <div class="data-block" style="background: var(--metal-dark); color: var(--teal-accent);">
+                GRID_REF: X-7Y-9<br>MODE: ANALYTIC
+            </div>
+            <div class="data-block" id="dataOutput">
+                > SENSOR: OFF<br>> WAITING...
+            </div>
+            <div class="data-block" style="flex-grow: 2; opacity: 0.3; background-image: radial-gradient(#004d40 20%, transparent 20%); background-size: 10px 10px;"></div>
+        </div>
+
+        <div class="grid-cell controls-area">
+            <button class="btn" id="xrayBtn">[X-RAY]</button>
+            <button class="btn btn-primary" id="scanBtn" disabled>ENGAGE SCAN PROTOCOL</button>
+        </div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('systemStatus');
+        const placeholder = document.getElementById('placeholderText');
+        const dataOutput = document.getElementById('dataOutput');
+        const viewport = document.getElementById('viewport');
+        const xrayBtn = document.getElementById('xrayBtn');
+        const scanBtn = document.getElementById('scanBtn');
+        
+        let gameState = 'INIT'; 
+        let audioCtxStarted = false;
+
+        const scanSynth = new Tone.Oscillator(440, "sine").toDestination();
+        const magnetSynth = new Tone.AMSynth({ harmonicity: 3, oscillator: { type: "sine" }, envelope: { attack: 0.1, decay: 0.1, sustain: 1, release: 0.5 } }).toDestination();
+        const shootSynth = new Tone.MembraneSynth().toDestination();
+        const successSynth = new Tone.PolySynth().toDestination();
+
+        const videoElement = document.getElementsByClassName('input_video')[0];
+        let handLandmarks = null;
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        hands.onResults((results) => {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handLandmarks = results.multiHandLandmarks[0];
+                if (gameState === 'GAME') updateGameLoop();
+            } else {
+                handLandmarks = null;
+            }
+        });
+
+        const camera = new Camera(videoElement, { onFrame: async () => { await hands.send({image: videoElement}); }, width: 640, height: 480 });
+
+        xrayBtn.addEventListener('click', async () => {
+            if (!audioCtxStarted) { await Tone.start(); audioCtxStarted = true; }
+            if (gameState === 'INIT') {
+                xrayBtn.innerText = "INITIALIZING..."; xrayBtn.disabled = true;
+                try {
+                    await camera.start();
+                    placeholder.style.display = 'none';
+                    scanBtn.disabled = false;
+                    statusDiv.innerText = "STATUS: CAMERA ACTIVE";
+                    statusDiv.style.background = "var(--teal-accent)";
+                    dataOutput.innerHTML = "> CAMERA: ON<br>> READY TO SCAN";
+                    startCameraPreview();
+                } catch (e) { alert("Camera required."); xrayBtn.disabled = false; }
+            }
+        });
+
+        function startCameraPreview() {
+            const canvas = document.getElementById('scanCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = viewport.clientWidth; canvas.height = viewport.clientHeight;
+            function draw() {
+                if (gameState !== 'INIT') return;
+                ctx.save(); ctx.scale(-1, 1); ctx.translate(-canvas.width, 0);
+                ctx.filter = "grayscale(80%) sepia(20%) hue-rotate(130deg)";
+                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                ctx.restore();
+                requestAnimationFrame(draw);
+            }
+            draw();
+        }
+
+        scanBtn.addEventListener('click', () => {
+            if (gameState !== 'INIT') return;
+            gameState = 'SCAN';
+            const canvas = document.getElementById('scanCanvas');
+            const ctx = canvas.getContext('2d');
+            statusDiv.innerText = "SCANNING..."; scanBtn.disabled = true; xrayBtn.disabled = true;
+            let scanY = 0; scanSynth.start(); scanSynth.frequency.rampTo(880, 2);
+
+            function animateScan() {
+                if (gameState !== 'SCAN') return;
+                ctx.save(); ctx.scale(-1, 1); ctx.translate(-canvas.width, 0);
+                ctx.filter = "grayscale(100%) contrast(1.5)";
+                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                ctx.restore();
+                ctx.beginPath(); ctx.moveTo(0, scanY); ctx.lineTo(canvas.width, scanY);
+                ctx.strokeStyle = '#1de9b6'; ctx.lineWidth = 5; ctx.shadowBlur = 20; ctx.shadowColor = '#1de9b6'; ctx.stroke();
+                scanY += 8;
+                if (scanY > canvas.height) { endScan(); } else { requestAnimationFrame(animateScan); }
+            }
+            animateScan();
+        });
+
+        function endScan() {
+            scanSynth.stop();
+            document.getElementById('overlayScan').style.display = 'flex';
+            setTimeout(() => {
+                document.getElementById('overlayScan').style.display = 'none';
+                document.getElementById('overlayReport').style.display = 'flex';
+                gameState = 'REPORT';
+            }, 3000);
+        }
+
+        document.getElementById('startSurgeryBtn').addEventListener('click', () => {
+            document.getElementById('overlayReport').style.display = 'none';
+            initPuzzle();
+        });
+
+        // --- 手术部分 ---
+        function initPuzzle() {
+            gameState = 'SURGERY';
+            document.getElementById('overlaySurgery').style.display = 'flex';
+            statusDiv.innerText = "STATUS: SURGERY IN PROGRESS";
+            
+            const container = document.getElementById('puzzleContainer');
+            container.innerHTML = '';
+            
+            let indices = [0,1,2,3,4,5,6,7,8].sort(() => Math.random() - 0.5);
+            
+            indices.forEach((index, i) => {
+                const piece = document.createElement('div');
+                piece.className = 'puzzle-piece'; piece.draggable = true;
+                piece.dataset.current = i; piece.dataset.correct = index;
+                const row = Math.floor(index / 3); const col = index % 3;
+                const size = 500 / 3;
+                piece.style.backgroundPosition = `-${col * size}px -${row * size}px`;
+                piece.style.backgroundSize = "500px 500px";
+                
+                container.appendChild(piece);
+                setupPuzzleDrag(piece);
+            });
+        }
+
+        let draggedPiece = null;
+        function setupPuzzleDrag(piece) {
+            piece.addEventListener('dragstart', function() { draggedPiece = this; this.classList.add('dragging'); });
+            piece.addEventListener('dragend', function() { this.classList.remove('dragging'); checkSolved(); });
+            piece.addEventListener('dragover', (e) => e.preventDefault());
+            piece.addEventListener('drop', function() {
+                if (this !== draggedPiece) {
+                    let tempBg = this.style.backgroundPosition;
+                    this.style.backgroundPosition = draggedPiece.style.backgroundPosition;
+                    draggedPiece.style.backgroundPosition = tempBg;
+                    let tempCorrect = this.dataset.correct;
+                    this.dataset.correct = draggedPiece.dataset.correct;
+                    draggedPiece.dataset.correct = tempCorrect;
+                }
+            });
+        }
+
+        function checkSolved() {
+            const pieces = document.querySelectorAll('.puzzle-piece');
+            let solved = true;
+            pieces.forEach((p, i) => { if (parseInt(p.dataset.correct) !== i) solved = false; });
+            
+            if (solved) {
+                successSynth.triggerAttackRelease(["C4", "E4", "G4"], "4n");
+                const msg = document.getElementById('surgeryMsg');
+                msg.innerText = "RECONSTRUCTION COMPLETE";
+                msg.style.borderColor = "#fff";
+                msg.style.color = "#fff";
+            }
+        }
+
+        document.getElementById('surgeryNextBtn').addEventListener('click', () => {
+            document.getElementById('overlaySurgery').style.display = 'none';
+            document.getElementById('overlaySelection').style.display = 'flex';
+            statusDiv.innerText = "STATUS: SELECT FUNCTIONALITY";
+        });
+
+        window.startTest = function(type) {
+            document.getElementById('overlaySelection').style.display = 'none';
+            initGame();
+        };
+
+        // --- 游戏逻辑 ---
+        let cables = [];
+        let isMagnetActive = false; 
+        let isSorting = false;
+
+        function initGame() {
+            gameState = 'GAME';
+            statusDiv.innerText = "STATUS: MOTOR TEST - CABLE SORTING";
+            dataOutput.innerHTML = "> INSTRUCTION: <br>1. MAKE A FIST TO ATTRACT CABLES<br>2. OPEN HAND TO SORT";
+            document.getElementById('scanCanvas').style.display = 'none';
+            document.getElementById('gameView').style.display = 'block';
+
+            let hud = document.createElement('div'); hud.className = 'game-hud-msg';
+            hud.innerText = "MAKE A FIST TO ACTIVATE MAGNET";
+            document.body.appendChild(hud);
+            setTimeout(() => hud.remove(), 5000);
+
+            const cw = viewport.clientWidth; const ch = viewport.clientHeight;
+            cables = [
+                { id: 'red', x: cw*0.3, y: ch*0.8, color: '#ff5252', targetId: 'targetRed', finished: false },
+                { id: 'blue', x: cw*0.5, y: ch*0.9, color: '#448aff', targetId: 'targetBlue', finished: false },
+                { id: 'green', x: cw*0.7, y: ch*0.8, color: '#69f0ae', targetId: 'targetGreen', finished: false }
+            ];
+            
+            cables.forEach(c => {
+                const el = document.getElementById(c.targetId);
+                const rect = el.getBoundingClientRect();
+                const viewRect = viewport.getBoundingClientRect();
+                c.tx = rect.left - viewRect.left + rect.width/2;
+                c.ty = rect.top - viewRect.top + rect.height/2;
+            });
+
+            const canvas = document.getElementById('gameCanvas');
+            canvas.width = cw; canvas.height = ch;
+        }
+
+        function lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
+
+        function updateGameLoop() {
+            if (gameState !== 'GAME' || !handLandmarks || isSorting) {
+                if (isSorting) renderGameFrame(0, 0); 
+                return;
+            }
+
+            const playerHand = document.getElementById('playerHand');
+            const cw = viewport.clientWidth; const ch = viewport.clientHeight;
+
+            const wrist = handLandmarks[0];
+            const handX = (1 - wrist.x) * cw; 
+            const handY = wrist.y * ch;
+
+            playerHand.style.left = handX + 'px';
+            playerHand.style.top = handY + 'px';
+
+            const tips = [8, 12, 16, 20]; 
+            let curledCount = 0;
+            tips.forEach(idx => {
+                if (Math.hypot(handLandmarks[idx].x - wrist.x, handLandmarks[idx].y - wrist.y) < 0.2) curledCount++;
+            });
+            const isFist = curledCount >= 3;
+
+            if (isFist) {
+                if (!isMagnetActive) {
+                    isMagnetActive = true;
+                    playerHand.classList.add('active-magnet');
+                    magnetSynth.triggerAttack("F2");
+                }
+                cables.forEach(c => {
+                    c.x = lerp(c.x, handX, 0.1); 
+                    c.y = lerp(c.y, handY + 50, 0.1);
+                });
+            } else {
+                if (isMagnetActive) {
+                    isMagnetActive = false;
+                    playerHand.classList.remove('active-magnet');
+                    magnetSynth.triggerRelease();
+                    if (Math.hypot(cables[0].x - handX, cables[0].y - handY) < 150) {
+                        startAutoSort();
+                    }
+                }
+            }
+            renderGameFrame(handX, handY);
+        }
+
+        function startAutoSort() {
+            isSorting = true;
+            statusDiv.innerText = "STATUS: AUTO-SORTING CABLES...";
+            shootSynth.triggerAttackRelease("C2", "8n");
+            
+            function sortAnim() {
+                let allFinished = true;
+                cables.forEach(c => {
+                    c.x = lerp(c.x, c.tx, 0.15); 
+                    c.y = lerp(c.y, c.ty, 0.15);
+                    if (Math.hypot(c.x - c.tx, c.y - c.ty) > 5) {
+                        allFinished = false;
+                    } else {
+                        c.finished = true;
+                    }
+                });
+                renderGameFrame(-1000, -1000); 
+                if (!allFinished) {
+                    requestAnimationFrame(sortAnim);
+                } else {
+                    finishGame();
+                }
+            }
+            sortAnim();
+        }
+
+        function renderGameFrame(handX, handY) {
+            const ctx = document.getElementById('gameCanvas').getContext('2d');
+            const cw = ctx.canvas.width; const ch = ctx.canvas.height;
+            ctx.clearRect(0, 0, cw, ch);
+
+            cables.forEach(c => {
+                ctx.beginPath();
+                ctx.moveTo(cw/2, ch + 100); 
+                let cpX = isMagnetActive ? handX : (cw/2 + c.x)/2;
+                let cpY = isMagnetActive ? ch : ch; 
+                ctx.quadraticCurveTo(cpX, cpY, c.x, c.y);
+                ctx.lineWidth = 8; ctx.strokeStyle = c.color; ctx.lineCap = 'round'; ctx.stroke();
+                ctx.beginPath(); ctx.arc(c.x, c.y, 15, 0, Math.PI*2);
+                ctx.fillStyle = "#fff"; ctx.fill();
+            });
+
+            if (isMagnetActive && !isSorting) {
+                ctx.strokeStyle = "rgba(29, 233, 182, 0.3)";
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 15]);
+                cables.forEach(c => {
+                    ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(c.x, c.y); ctx.stroke();
+                });
+                ctx.setLineDash([]);
+            }
+        }
+
+        function finishGame() {
+            successSynth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "4n");
+            setTimeout(() => {
+                document.getElementById('overlayFinish').style.display = 'flex';
+            }, 500);
+        }
+
+    </script>
+</body>
+</html>
